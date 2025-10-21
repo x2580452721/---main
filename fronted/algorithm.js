@@ -675,33 +675,30 @@ function displayAlgorithmResult(result) {
     }
 
     const metrics = result.metrics;
-    const algo = result.algorithm;
+
+    // ✅ 数值安全格式化
+    function safeFormat(value) {
+        return (typeof value === "number" && !isNaN(value)) ? value.toFixed(4) : "不适用";
+    }
 
     // ✅ 判断是否是聚类算法
+    const algo = result.algorithm;
     const isClustering = (algo === "kmeans" || algo === "em");
 
     if (isClustering) {
-        // 显示 ARI 与 Silhouette
-        const ariElem = document.getElementById("accuracy"); // 借用原卡片显示
-        const silElem = document.getElementById("precision");
-        const msgElem = document.getElementById("recall");
-
-        if (ariElem) ariElem.innerText = metrics.ari !== undefined ? metrics.ari.toFixed(4) : "--";
-        if (silElem) silElem.innerText = metrics.silhouette !== undefined ? metrics.silhouette.toFixed(4) : "--";
-        if (msgElem) msgElem.innerText = "(聚类算法不适用 accuracy / f1 / mse)";
-
-        // 其余卡片清空
-        ["f1", "mse"].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerText = "--";
-        });
+        // 聚类算法只显示ARI和轮廓系数
+        document.getElementById("accuracy").innerText = `ARI: ${safeFormat(metrics.ari)}`;
+        document.getElementById("precision").innerText = `轮廓系数: ${safeFormat(metrics.silhouette)}`;
+        document.getElementById("recall").innerText = "不适用";
+        document.getElementById("f1").innerText = "不适用";
+        document.getElementById("mse").innerText = "不适用";
     } else {
-        // 分类或回归算法
-        if (metrics.accuracy !== undefined) document.getElementById("accuracy").innerText = metrics.accuracy.toFixed(4);
-        if (metrics.precision !== undefined) document.getElementById("precision").innerText = metrics.precision.toFixed(4);
-        if (metrics.recall !== undefined) document.getElementById("recall").innerText = metrics.recall.toFixed(4);
-        if (metrics.f1 !== undefined) document.getElementById("f1").innerText = metrics.f1.toFixed(4);
-        if (metrics.mse !== undefined) document.getElementById("mse").innerText = metrics.mse.toFixed(4);
+        // 分类 / 回归算法
+        document.getElementById("accuracy").innerText = safeFormat(metrics.accuracy);
+        document.getElementById("precision").innerText = safeFormat(metrics.precision);
+        document.getElementById("recall").innerText = safeFormat(metrics.recall);
+        document.getElementById("f1").innerText = safeFormat(metrics.f1);
+        document.getElementById("mse").innerText = safeFormat(metrics.mse);
     }
 
     // ✅ 显示算法名称
@@ -717,6 +714,7 @@ function displayAlgorithmResult(result) {
 
     console.log("算法运行结果详情:", result);
 }
+
 
 
 
