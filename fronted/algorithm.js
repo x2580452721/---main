@@ -235,73 +235,85 @@ function initDatasetViewer() {
 
 async function visualizeDataset(datasetKey) {
     try {
-        const response = await fetch(`${API_BASE_URL}/dataset/${datasetKey}`);
+        console.log(`开始可视化数据集: ${datasetKey}`);
 
-        if (!response.ok) {
-            throw new Error(`HTTP错误！状态: ${response.status}`);
+        const canvas = document.getElementById("datasetCanvas");
+        if (!canvas) {
+            throw new Error("未找到 #datasetCanvas 元素，请检查 HTML 文件");
         }
 
-        const dataset = await response.json();
+        // 设置画布尺寸
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const container = document.getElementById('datasetVisualization');
-        container.innerHTML = '';
+        // 从后端获取数据集样本（假设 API: /api/dataset/<name>）
+        const response = await fetch(`http://127.0.0.1:5000/api/dataset/${datasetKey}`);
+        if (!response.ok) throw new Error(`HTTP错误！状态: ${response.status}`);
+        const data = await response.json();
 
-        const canvas = document.createElement('canvas');
-        canvas.id = 'datasetCanvas';
-
-        // 关键：设置最小尺寸或根据容器尺寸设置
-        const containerWidth = container.offsetWidth || 800;
-        const containerHeight = container.offsetHeight || 600;
-        canvas.width = containerWidth;
-        canvas.height = containerHeight;
-
-        container.appendChild(canvas);
-
-        const ctx = canvas.getContext('2d');
-
-        // 根据数据集类型调用相应的绘制函数
-        switch (datasetKey) {
-            case 'iris':
-                drawIrisDataset(ctx, canvas.width, canvas.height, dataset);
-                break;
-            case 'mnist':
-                drawMNISTDataset(ctx, canvas.width, canvas.height, dataset);
-                break;
-            case 'regression':
-                drawRegressionDataset(ctx, canvas.width, canvas.height, dataset);
-                break;
+        // 检查数据结构
+        if (!data || !data.features) {
+            throw new Error("后端返回的数据格式错误或为空");
         }
 
-        // 可选：窗口大小变化时重新绘制
-        function handleResize() {
-            const w = container.offsetWidth || 800;
-            const h = container.offsetHeight || 600;
-            canvas.width = w;
-            canvas.height = h;
+        // 绘制背景与标题
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#2c3e50";
+        ctx.font = "18px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`${datasetKey.toUpperCase()} 数据集可视化`, canvas.width / 2, 30);
 
-            // 重新绘制
-            switch (datasetKey) {
-                case 'iris':
-                    drawIrisDataset(ctx, w, h, dataset);
-                    break;
-                case 'mnist':
-                    drawMNISTDataset(ctx, w, h, dataset);
-                    break;
-                case 'regression':
-                    drawRegressionDataset(ctx, w, h, dataset);
-                    break;
-            }
+        // 简单散点图演示（仅前两个特征）
+        const features = data.features;
+        const labels = data.labels || [];
+
+        const n = Math.min(features.length, 150); // 限制绘制点数
+        const xVals = features.map(f => f[0]);
+        const yVals = features.map(f => f[1]);
+
+        const minX = Math.min(...xVals);
+        const maxX = Math.max(...xVals);
+        const minY = Math.min(...yVals);
+        const maxY = Math.max(...yVals);
+
+        for (let i = 0; i < n; i++) {
+            const x = ((features[i][0] - minX) / (maxX - minX)) * (canvas.width - 100) + 50;
+            const y = canvas.height - (((features[i][1] - minY) / (maxY - minY)) * (canvas.height - 100) + 50);
+
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = labels[i] ? randomColorForLabel(labels[i]) : "#3498db";
+            ctx.fill();
         }
 
-        window.addEventListener('resize', handleResize);
-        // 保存清理函数，避免重复绑定
-        canvas._onResize = handleResize;
+        console.log(`✅ 数据集 ${datasetKey} 可视化成功，共绘制 ${n} 个样本点。`);
 
     } catch (error) {
-        console.error('可视化数据集失败:', error);
-        alert('获取数据集失败，请重试。');
+        console.error("❌ 可视化数据集失败:", error);
+        alert(`可视化数据集失败: ${error.message}`);
     }
 }
+
+// 辅助函数：根据标签随机上色
+function randomColorForLabel(label) {
+    const colors = ["#3498db", "#e74c3c", "#2ecc71", "#f1c40f", "#9b59b6"];
+    const index = Math.abs(hashCode(label)) % colors.length;
+    return colors[index];
+}
+
+// 简单哈希函数用于颜色稳定
+function hashCode(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+}
+
 
 // 初始化比较图表
 function initComparisonChart() {
@@ -663,13 +675,34 @@ function displayAlgorithmResult(result) {
     }
 
     const metrics = result.metrics;
+    const algo = result.algorithm;
 
-    // ✅ 更新性能指标卡片内容
-    if (metrics.accuracy !== undefined) document.getElementById("accuracy").innerText = metrics.accuracy.toFixed(4);
-    if (metrics.precision !== undefined) document.getElementById("precision").innerText = metrics.precision.toFixed(4);
-    if (metrics.recall !== undefined) document.getElementById("recall").innerText = metrics.recall.toFixed(4);
-    if (metrics.f1 !== undefined) document.getElementById("f1").innerText = metrics.f1.toFixed(4);
-    if (metrics.mse !== undefined) document.getElementById("mse").innerText = metrics.mse.toFixed(4);
+    // ✅ 判断是否是聚类算法
+    const isClustering = (algo === "kmeans" || algo === "em");
+
+    if (isClustering) {
+        // 显示 ARI 与 Silhouette
+        const ariElem = document.getElementById("accuracy"); // 借用原卡片显示
+        const silElem = document.getElementById("precision");
+        const msgElem = document.getElementById("recall");
+
+        if (ariElem) ariElem.innerText = metrics.ari !== undefined ? metrics.ari.toFixed(4) : "--";
+        if (silElem) silElem.innerText = metrics.silhouette !== undefined ? metrics.silhouette.toFixed(4) : "--";
+        if (msgElem) msgElem.innerText = "(聚类算法不适用 accuracy / f1 / mse)";
+
+        // 其余卡片清空
+        ["f1", "mse"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = "--";
+        });
+    } else {
+        // 分类或回归算法
+        if (metrics.accuracy !== undefined) document.getElementById("accuracy").innerText = metrics.accuracy.toFixed(4);
+        if (metrics.precision !== undefined) document.getElementById("precision").innerText = metrics.precision.toFixed(4);
+        if (metrics.recall !== undefined) document.getElementById("recall").innerText = metrics.recall.toFixed(4);
+        if (metrics.f1 !== undefined) document.getElementById("f1").innerText = metrics.f1.toFixed(4);
+        if (metrics.mse !== undefined) document.getElementById("mse").innerText = metrics.mse.toFixed(4);
+    }
 
     // ✅ 显示算法名称
     if (result.algorithm) {
@@ -681,8 +714,10 @@ function displayAlgorithmResult(result) {
     if (metricsSection) {
         metricsSection.scrollIntoView({ behavior: "smooth" });
     }
+
     console.log("算法运行结果详情:", result);
 }
+
 
 
 
@@ -691,75 +726,141 @@ function displayAlgorithmResult(result) {
 // 绘制算法结果可视化
 // 绘制算法结果可视化
 function drawAlgorithmResults(algoKey, datasetKey, metrics, visualizationData) {
-    // 首先绘制算法基本示意图
-    drawAlgorithmDiagram(algoKey);
-
+    // 1️⃣ 初始化画布
     const canvas = document.getElementById('algorithmVisualization');
+    if (!canvas) {
+        console.error("❌ 未找到 #algorithmVisualization 画布元素");
+        return;
+    }
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
     const ctx = canvas.getContext('2d');
 
-    // 在图表上方绘制性能指标标题
+    // 2️⃣ 清空旧内容
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 3️⃣ 绘制算法原理图
+    drawAlgorithmDiagram(algoKey);
+
+    // 4️⃣ 绘制标题
     ctx.fillStyle = '#333';
-    ctx.font = '14px Arial bold';
+    ctx.font = '16px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('算法性能结果', canvas.width / 2, 30);
 
-    // 安全格式化函数，避免 null/undefined 报错
-    function safeToFixed(value, digits = 4) {
-        return (typeof value === "number" && !isNaN(value)) ? value.toFixed(digits) : "N/A";
+    // 5️⃣ 安全格式化
+    function formatNumber(value) {
+        if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) {
+            return '--';
+        }
+        return value.toFixed(4);
     }
 
-    // 绘制性能指标卡片
-    const metricsList = [];
-    metricsList.push(`准确率: ${safeToFixed(metrics?.accuracy)}`);
-    metricsList.push(`精确率: ${safeToFixed(metrics?.precision)}`);
-    metricsList.push(`召回率: ${safeToFixed(metrics?.recall)}`);
-    metricsList.push(`F1分数: ${safeToFixed(metrics?.f1)}`);
-    metricsList.push(`均方误差: ${safeToFixed(metrics?.mse)}`);
+    // 6️⃣ 构造不适用判断逻辑
+    const clusteringAlgorithms = ['kmeans', 'em'];
+    const regressionAlgorithms = ['linear_regression'];
+    const classificationAlgorithms = [
+        'decision_tree',
+        'random_forest',
+        'logistic_regression',
+        'knn',
+        'naive_bayes',
+        'svm',
+        'adaboost'
+    ];
 
+    // 7️⃣ 构造指标列表
+    const metricsList = [];
+
+    // 🎯 判断算法和数据集类型对应关系
+    if (clusteringAlgorithms.includes(algoKey)) {
+        metricsList.push(`ARI(兰德指数): ${formatNumber(metrics?.ari)}`);
+        metricsList.push(`轮廓系数: ${formatNumber(metrics?.silhouette)}`);
+        metricsList.push(`准确率: 不适用`);
+        metricsList.push(`精确率: 不适用`);
+        metricsList.push(`召回率: 不适用`);
+        metricsList.push(`F1分数: 不适用`);
+        metricsList.push(`均方误差: 不适用`);
+    } 
+    else if (regressionAlgorithms.includes(algoKey)) {
+        metricsList.push(`准确率: 不适用`);
+        metricsList.push(`精确率: 不适用`);
+        metricsList.push(`召回率: 不适用`);
+        metricsList.push(`F1分数: 不适用`);
+        metricsList.push(`均方误差: ${formatNumber(metrics?.mse)}`);
+    } 
+    else if (classificationAlgorithms.includes(algoKey)) {
+        metricsList.push(`准确率: ${formatNumber(metrics?.accuracy)}`);
+        metricsList.push(`精确率: ${formatNumber(metrics?.precision)}`);
+        metricsList.push(`召回率: ${formatNumber(metrics?.recall)}`);
+        metricsList.push(`F1分数: ${formatNumber(metrics?.f1)}`);
+        metricsList.push(`均方误差: 不适用`);
+    } 
+    else {
+        metricsList.push(`暂无可用指标`);
+    }
+
+    // 8️⃣ 在右上角绘制指标框
     metricsList.forEach((metric, index) => {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillRect(canvas.width - 200, 50 + index * 30, 180, 25);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillRect(canvas.width - 220, 50 + index * 30, 200, 25);
 
         ctx.fillStyle = '#333';
-        ctx.font = '12px Arial';
+        ctx.font = '13px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText(metric, canvas.width - 190, 68 + index * 30);
+        ctx.fillText(metric, canvas.width - 210, 68 + index * 30);
     });
 
-    // 如果有算法特定的可视化数据，在这里处理
+    // 9️⃣ 绘制算法特定图形
     if (visualizationData) {
-        if (algoKey === 'decision_tree') {
-            drawDecisionTree(ctx, canvas.width, canvas.height);
+        switch (algoKey) {
+            case 'decision_tree':
+                drawDecisionTree(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'kmeans':
+                drawKMeansResults(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'knn':
+                drawKNN(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'adaboost':
+                drawAdaBoost(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'em':
+                drawEM(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'linear_regression':
+                drawLinearRegression(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'logistic_regression':
+                drawLogisticRegression(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'random_forest':
+                drawRandomForest(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'naive_bayes':
+                drawNaiveBayes(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            case 'svm':
+                drawSVM(ctx, canvas.width, canvas.height, visualizationData);
+                break;
+            default:
+                ctx.fillStyle = '#999';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('暂无可视化实现', canvas.width / 2, canvas.height / 2);
+                break;
         }
-        else if (algoKey === 'kmeans') {
-            drawKMeansResults(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'knn') {
-            drawKNN(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'adaboost') {
-            drawAdaBoost(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'em') {
-            drawEM(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'linear_regression') {
-            drawLinearRegression(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'logistic_regression') {
-            drawLogisticRegression(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'random_forest') {
-            drawRandomForest(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'naive_bayes') {
-            drawNaiveBayes(ctx, canvas.width, canvas.height);
-        }
-        else if (algoKey === 'svm') {
-            drawSVM(ctx, canvas.width, canvas.height);
-        }
+    } else {
+        ctx.fillStyle = '#999';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无可视化数据', canvas.width / 2, canvas.height / 2);
     }
+
+    console.log(`✅ drawAlgorithmResults 完成绘制: ${algoKey}`);
 }
+
 
 
 // 以下是各种算法的可视化绘制函数和数据集可视化函数

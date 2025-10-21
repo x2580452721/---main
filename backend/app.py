@@ -169,15 +169,23 @@ def get_datasets():
 def get_dataset(dataset_id):
     if dataset_id not in datasets or datasets[dataset_id] is None:
         return jsonify({'error': '数据集不存在'}), 404
+
     X, y, desc = datasets[dataset_id]
+
+    # 获取样本数（防止一次性加载太多）
     sample_size = int(request.args.get('sample_size', min(100, len(X))))
     sample_size = max(1, min(sample_size, len(X)))
+
+    # 随机抽样
     indices = np.random.choice(len(X), sample_size, replace=False)
+
+    # ✅ 关键修改：返回字段名与前端一致
     return jsonify({
-        'samples': X[indices].tolist(),
+        'features': X[indices].tolist(),   # 原来是 'samples'
         'labels': y[indices].tolist(),
         'description': desc
     })
+
 
 # ---------- 新增接口：后端执行数据分割 ----------
 @app.route('/api/split', methods=['POST'])
