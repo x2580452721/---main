@@ -621,45 +621,71 @@ function initCanvases() {
 
 async function runAlgorithm(algoKey, datasetKey) {
     try {
-        // 从页面输入框获取数据分割比例
-        const testSizeInput = document.getElementById('testSize');
-        const testSize = testSizeInput ? parseFloat(testSizeInput.value) : 0.3;
+        const splitRatioSelect = document.getElementById("splitRatio");
+        const testSize = splitRatioSelect ? parseFloat(splitRatioSelect.value) : 0.3;
 
-        // 检查 test_size 合法性
         if (isNaN(testSize) || testSize <= 0 || testSize >= 1) {
-            alert('请输入 0 到 1 之间的数据分割比例（如 0.3 表示 30% 作为测试集）');
+            alert("请输入 0 到 1 之间的测试集比例！");
             return;
         }
 
-        // 向后端发送请求
-        const splitRatio = document.getElementById("splitRatio").value;
-
-fetch("http://127.0.0.1:5000/api/train", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-        algorithm: algorithm,
-        dataset: dataset,
-        test_size: parseFloat(splitRatio)   // ✅ 新增字段
-    })
-})
-
+        const response = await fetch("http://127.0.0.1:5000/api/train", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                algorithm: algoKey,
+                dataset: datasetKey,
+                test_size: testSize
+            })
+        });
 
         if (!response.ok) {
-            throw new Error(`HTTP错误！状态: ${response.status}`);
+            throw new Error(`HTTP错误！状态码: ${response.status}`);
         }
 
         const result = await response.json();
-        console.log('算法运行结果:', result);
+        console.log("算法运行结果:", result);
 
-        // 显示结果
+        // ✅ 调用结果展示函数
         displayAlgorithmResult(result);
 
     } catch (error) {
-        console.error('运行算法失败:', error);
-        alert('运行算法失败，请重试。');
+        console.error("运行算法失败:", error);
+        alert("运行算法失败，请检查控制台。");
     }
 }
+
+function displayAlgorithmResult(result) {
+    if (!result || !result.metrics) {
+        console.warn("⚠️ 后端未返回有效的 metrics 字段:", result);
+        alert("未获取到算法运行结果，请检查后端输出。");
+        return;
+    }
+
+    const metrics = result.metrics;
+
+    // ✅ 更新性能指标卡片内容
+    if (metrics.accuracy !== undefined) document.getElementById("accuracy").innerText = metrics.accuracy.toFixed(4);
+    if (metrics.precision !== undefined) document.getElementById("precision").innerText = metrics.precision.toFixed(4);
+    if (metrics.recall !== undefined) document.getElementById("recall").innerText = metrics.recall.toFixed(4);
+    if (metrics.f1 !== undefined) document.getElementById("f1").innerText = metrics.f1.toFixed(4);
+    if (metrics.mse !== undefined) document.getElementById("mse").innerText = metrics.mse.toFixed(4);
+
+    // ✅ 显示算法名称
+    if (result.algorithm) {
+        document.getElementById("algorithmTitle").innerText = `算法：${result.algorithm}`;
+    }
+
+    // ✅ 滚动视图到性能指标区域
+    const metricsSection = document.querySelector(".performance-metrics");
+    if (metricsSection) {
+        metricsSection.scrollIntoView({ behavior: "smooth" });
+    }
+    console.log("算法运行结果详情:", result);
+}
+
+
+
 
 
 // 绘制算法结果可视化

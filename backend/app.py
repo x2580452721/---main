@@ -271,6 +271,7 @@ def split_dataset():
 @app.route('/api/train', methods=['POST'])
 def train_model():
     data = request.json
+    print(f'{data}')
     if not data or 'algorithm' not in data or 'dataset' not in data:
         return jsonify({'error': '缺少算法或数据集参数'}), 400
     algorithm_id = data['algorithm']
